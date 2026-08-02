@@ -14,6 +14,12 @@ struct MainCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
     )
+
+    @Option(help: "基线 .app 文件路径；需和 --comparison-app 一起使用")
+    var baselineApp: String?
+
+    @Option(help: "对比 .app 文件路径；需和 --baseline-app 一起使用")
+    var comparisonApp: String?
     
 #if DEBUG
 
@@ -70,7 +76,18 @@ struct MainCommand: AsyncParsableCommand {
         analyzeConfig.configPath = config
         analyzeConfig.reportOutputPath = output
         // 解析器和规则配置
-        if let modules = self.modules {
+        if baselineApp != nil || comparisonApp != nil {
+            guard let baselineApp, let comparisonApp else {
+                throw ValidationError("--baseline-app 和 --comparison-app 必须同时传入")
+            }
+            guard ipa == nil, modules == nil else {
+                throw ValidationError("对比模式不能同时使用 --ipa 或 --modules")
+            }
+            try await appAnalyze.compare(
+                baselineAppPath: baselineApp,
+                comparisonAppPath: comparisonApp
+            )
+        } else if let modules = self.modules {
             appAnalyze.parser = ModuleFileParser(path: modules)
             //
             let ruleManager = appAnalyze.ruleManager
@@ -81,10 +98,11 @@ struct MainCommand: AsyncParsableCommand {
         } else if let ipa = self.ipa {
             appAnalyze.parser = IPAParser(appPath: ipa)
         } else {
-            fatalError("参数错误")
+            throw ValidationError("需要传入 --ipa、--modules 或一组 APP 对比参数")
         }
-        //
-        await appAnalyze.run()
+        if baselineApp == nil {
+            await appAnalyze.run()
+        }
         //
         log("结束执行")
         print("总耗时\(-Int(date.timeIntervalSinceNow))s")

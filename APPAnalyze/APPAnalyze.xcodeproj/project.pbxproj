@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		AA0000010000000000000001 /* Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000040000000000000004 /* Tests.swift */; };
 		AA0000020000000000000002 /* APPAnalyzeCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C36F495B2AF8DE220056CCA7 /* APPAnalyzeCore.framework */; };
+		AB0000020000000000000002 /* APPComparisonReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000010000000000000001 /* APPComparisonReporter.swift */; };
 		C311A6A12A6A8B8300271609 /* MainCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = C311A6A02A6A8B8300271609 /* MainCommand.swift */; };
 		C323F01F2B32D3BB00FC4144 /* LargeSymbolRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = C323F01E2B32D3BB00FC4144 /* LargeSymbolRule.swift */; };
 		C36F495E2AF8DE220056CCA7 /* APPAnalyzeCore.h in Headers */ = {isa = PBXBuildFile; fileRef = C36F495D2AF8DE220056CCA7 /* APPAnalyzeCore.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -133,6 +134,7 @@
 /* Begin PBXFileReference section */
 		AA0000040000000000000004 /* Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests.swift; sourceTree = "<group>"; };
 		AA0000050000000000000005 /* APPAnalyzeCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = APPAnalyzeCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB0000010000000000000001 /* APPComparisonReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APPComparisonReporter.swift; sourceTree = "<group>"; };
 		C311A69E2A6A8B8300271609 /* APPAnalyzeCommand */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = APPAnalyzeCommand; sourceTree = BUILT_PRODUCTS_DIR; };
 		C311A6A02A6A8B8300271609 /* MainCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainCommand.swift; sourceTree = "<group>"; };
 		C323F01E2B32D3BB00FC4144 /* LargeSymbolRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargeSymbolRule.swift; sourceTree = "<group>"; };
@@ -299,6 +301,7 @@
 		C36F49622AF8DE4A0056CCA7 /* Reporters */ = {
 			isa = PBXGroup;
 			children = (
+				AB0000010000000000000001 /* APPComparisonReporter.swift */,
 				C36F49632AF8DE4A0056CCA7 /* IssueReporter.swift */,
 				C36F49642AF8DE4A0056CCA7 /* APPPackageSizeReporter.swift */,
 			);
@@ -685,6 +688,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB0000020000000000000002 /* APPComparisonReporter.swift in Sources */,
 				C36F49B32AF8DE4C0056CCA7 /* Module.swift in Sources */,
 				C36F49CC2AF8DE4C0056CCA7 /* DynamicFrameworkStripRule.swift in Sources */,
 				C36F49BF2AF8DE4C0056CCA7 /* DynamicUseObjCClassRule.swift in Sources */,

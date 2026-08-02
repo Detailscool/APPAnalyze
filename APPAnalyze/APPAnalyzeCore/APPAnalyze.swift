@@ -30,6 +30,7 @@ public class APPAnalyze {
     /// 开始执行
     public func run() async {
         config.check()
+        APP.shared.reset()
         // 解析工程或IPA为模块
         let modules = await parser.parse()
         // 解析模块 macho 和资源
@@ -38,5 +39,32 @@ public class APPAnalyze {
         await ruleManager.check()
         // 生成数据
         await reporterManager.print()
+    }
+
+    /// 对比两个 `.app` 的包体积并生成增量报告。
+    public func compare(baselineAppPath: String, comparisonAppPath: String) async throws {
+        parser = IPAParser(appPath: baselineAppPath)
+        config.check()
+        let baseline = await packageSize(appPath: baselineAppPath)
+        let comparison = await packageSize(appPath: comparisonAppPath)
+        let report = APPComparisonReporter.compare(
+            baseline: baseline,
+            comparison: comparison,
+            baselineApp: URL(fileURLWithPath: baselineAppPath).lastPathComponent,
+            comparisonApp: URL(fileURLWithPath: comparisonAppPath).lastPathComponent
+        )
+        try FileManager.default.createDirectory(
+            atPath: config.reportOutputPath,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        APPComparisonReporter.generateReport(report)
+    }
+
+    private func packageSize(appPath: String) async -> AppPackageSize {
+        APP.shared.reset()
+        let modules = await IPAParser(appPath: appPath).parse()
+        await ModuleParser.parse(modules: modules, generateModuleReport: false)
+        return APPPackageSizeReporter.packageSize()
     }
 }

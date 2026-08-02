@@ -62,4 +62,54 @@ final class Tests: XCTestCase {
         XCTAssertFalse(app.allDependencies.contains("App"))
     }
 
+    func testPackageComparisonReportsAddedRemovedAndChangedComponents() {
+        let baseline = AppPackageSize(
+            allSize: 100,
+            binarySize: 70,
+            resourceSize: 30,
+            components: [
+                component(name: "Feature", total: 60, resource: 10),
+                component(name: "Removed", total: 40, resource: 20),
+            ]
+        )
+        let comparison = AppPackageSize(
+            allSize: 130,
+            binarySize: 80,
+            resourceSize: 50,
+            components: [
+                component(name: "Feature", total: 80, resource: 20),
+                component(name: "Added", total: 50, resource: 30),
+            ]
+        )
+
+        let report = APPComparisonReporter.compare(
+            baseline: baseline,
+            comparison: comparison,
+            baselineApp: "Baseline.app",
+            comparisonApp: "Comparison.app"
+        )
+        let components = Dictionary(uniqueKeysWithValues: report.components.map { ($0.name, $0) })
+
+        XCTAssertEqual(report.total.deltaSize, 30)
+        XCTAssertEqual(report.total.deltaPercent, 30)
+        XCTAssertEqual(report.binary.deltaSize, 10)
+        XCTAssertEqual(report.resource.deltaSize, 20)
+        XCTAssertEqual(components["Feature"]?.status, .changed)
+        XCTAssertEqual(components["Feature"]?.total.deltaSize, 20)
+        XCTAssertEqual(components["Added"]?.status, .added)
+        XCTAssertEqual(components["Added"]?.total.deltaSize, 50)
+        XCTAssertEqual(components["Removed"]?.status, .removed)
+        XCTAssertEqual(components["Removed"]?.total.deltaSize, -40)
+    }
+
+    private func component(name: String, total: Int, resource: Int) -> ModulePackageSize {
+        ModulePackageSize(
+            name: name,
+            version: nil,
+            size: total,
+            libraries: [],
+            resource: ModuleResourceSize(bundles: [], size: resource)
+        )
+    }
+
 }

@@ -10,7 +10,7 @@ import Foundation
 #warning("解析 framework 里的资源")
 
 enum ModuleParser {
-    static func parse(modules: [ModuleInfo]) async {
+    static func parse(modules: [ModuleInfo], generateModuleReport: Bool = true) async {
         let frameworks = await withTaskGroup(of: Module.self) { taskGroup in
             // 解析模块
             for module in modules {
@@ -52,7 +52,9 @@ enum ModuleParser {
         //
         APP.shared.calculateAllSuperClassAndProtocol()
         //
-        APPAnalyze.shared.reporterManager.generateReport(data: modules.data, fileName: "modules.json")
+        if generateModuleReport {
+            APPAnalyze.shared.reporterManager.generateReport(data: modules.data, fileName: "modules.json")
+        }
     }
 
     static func calculateAllDependencies(modules: [Module]) {

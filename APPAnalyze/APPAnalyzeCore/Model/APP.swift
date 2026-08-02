@@ -32,6 +32,14 @@ public class APP {
         
     }
 
+    func reset() {
+        classlist.removeAll()
+        protolist.removeAll()
+        categorylist.removeAll()
+        modules.removeAll()
+        mainModule = ""
+    }
+
     /// 计算所有类的父类列表和协议列表用于后续扫描
     func calculateAllSuperClassAndProtocol() {
         //

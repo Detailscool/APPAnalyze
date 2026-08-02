@@ -34,6 +34,8 @@ OPTIONS:
   --output <output>       输出文件目录。必传参数
   --config <config>       配置JSON文件地址。非必传参数
   --ipa <ipa>             ipa.app文件地址。必传参数
+  --baseline-app <path>   基线 .app 文件路径
+  --comparison-app <path> 对比 .app 文件路径
   -h, --help              Show help information.
 ```
 ### 执行
@@ -43,6 +45,23 @@ OPTIONS:
 /Users/Test/APPAnalyzeCommand --ipa ipas/JDAPP/JDAPP.app --output ipas/JDAPP
 ```
 > 提示：如果提示`permission denied`没有权限，执行`sudo chmod -R 777 /Users/a/Desktop/ipas/APPAnalyzeCommand`即可。双击`APPAnalyzeCommand`是否可以直接唤起终端程序。
+
+### 包体积对比
+
+同时传入基线 APP 和对比 APP，可以生成包体积增量报告。对比模式只计算包体积，不执行问题扫描规则。
+
+``` shell
+/Users/Test/APPAnalyzeCommand \
+  --baseline-app ipas/1.0/JDAPP.app \
+  --comparison-app ipas/1.1/JDAPP.app \
+  --output ipas/comparison
+```
+
+输出文件：
+
+- `comparison.html`：总大小、二进制、资源及模块级增量报告。
+- `comparison.json`：适合 CI 和数据平台消费的结构化增量数据。
+
 ### 生成产物
 ![截屏2023-09-02 16.15.12.png](https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/fa71a13c996747089246d7c871cd6130~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=980&h=304&s=55650&e=png&a=1&b=fefefe)
 指令执行完成以后，会在`ouput`参数指定的文件夹生成`APPAnalyze`文件夹。具体文件介绍如下：
