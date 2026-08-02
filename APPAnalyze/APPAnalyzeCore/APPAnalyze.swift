@@ -42,16 +42,31 @@ public class APPAnalyze {
     }
 
     /// 对比两个 `.app` 的包体积并生成增量报告。
-    public func compare(baselineAppPath: String, comparisonAppPath: String) async throws {
+    public func compare(
+        baselineAppPath: String,
+        comparisonAppPath: String,
+        baselineLinkMapPath: String? = nil,
+        comparisonLinkMapPath: String? = nil
+    ) async throws {
         parser = IPAParser(appPath: baselineAppPath)
         config.check()
         let baseline = await packageSize(appPath: baselineAppPath)
         let comparison = await packageSize(appPath: comparisonAppPath)
+        let baselineAppName = URL(fileURLWithPath: baselineAppPath).deletingPathExtension().lastPathComponent
+        let comparisonAppName = URL(fileURLWithPath: comparisonAppPath).deletingPathExtension().lastPathComponent
+        let baselineLinkMap = try baselineLinkMapPath.map {
+            try LinkMapParser.parse(path: $0, appName: baselineAppName, expectedArch: config.archType.rawValue)
+        }
+        let comparisonLinkMap = try comparisonLinkMapPath.map {
+            try LinkMapParser.parse(path: $0, appName: comparisonAppName, expectedArch: config.archType.rawValue)
+        }
         let report = APPComparisonReporter.compare(
             baseline: baseline,
             comparison: comparison,
-            baselineApp: URL(fileURLWithPath: baselineAppPath).lastPathComponent,
-            comparisonApp: URL(fileURLWithPath: comparisonAppPath).lastPathComponent
+            baselineApp: URL(fileURLWithPath: baselineAppPath).standardizedFileURL.path,
+            comparisonApp: URL(fileURLWithPath: comparisonAppPath).standardizedFileURL.path,
+            baselineLinkMap: baselineLinkMap,
+            comparisonLinkMap: comparisonLinkMap
         )
         try FileManager.default.createDirectory(
             atPath: config.reportOutputPath,

@@ -36,6 +36,8 @@ OPTIONS:
   --ipa <ipa>             ipa.app文件地址。必传参数
   --baseline-app <path>   基线 .app 文件路径
   --comparison-app <path> 对比 .app 文件路径
+  --baseline-link-map <path>   基线 APP 的 Link Map
+  --comparison-link-map <path> 对比 APP 的 Link Map
   -h, --help              Show help information.
 ```
 ### 执行
@@ -57,10 +59,24 @@ OPTIONS:
   --output ipas/comparison
 ```
 
+如果需要精确到 `.o` 的二进制新增、删除和大小变化，请同时传入两次构建生成的 Link Map（Xcode Build Settings 中开启 `Write Link Map File`）：
+
+``` shell
+/Users/Test/APPAnalyzeCommand \
+  --baseline-app ipas/1.0/JDAPP.app \
+  --baseline-link-map ipas/1.0/JDAPP-LinkMap-normal-arm64.txt \
+  --comparison-app ipas/1.1/JDAPP.app \
+  --comparison-link-map ipas/1.1/JDAPP-LinkMap-normal-arm64.txt \
+  --arch arm64 \
+  --output ipas/comparison
+```
+
+两份 Link Map 必须与 `--arch` 对应。只传 APP 时，最终 Mach-O 无法可靠还原链接前的 `.o` 边界，因此二进制明细只展示 APP 中仍可识别的库或二进制粒度。
+
 输出文件：
 
-- `comparison.html`：总大小、二进制、资源及模块级增量报告。
-- `comparison.json`：适合 CI 和数据平台消费的结构化增量数据。
+- `comparison.html`：总大小、模块、二进制文件和资源文件的增量报告。
+- `comparison.json`：包含模块、库/目标文件、Bundle 资源及 ImageSet/DataSet 明细，适合 CI 和数据平台消费。
 
 ### 生成产物
 ![截屏2023-09-02 16.15.12.png](https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/fa71a13c996747089246d7c871cd6130~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=980&h=304&s=55650&e=png&a=1&b=fefefe)

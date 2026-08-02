@@ -20,6 +20,12 @@ struct MainCommand: AsyncParsableCommand {
 
     @Option(help: "对比 .app 文件路径；需和 --baseline-app 一起使用")
     var comparisonApp: String?
+
+    @Option(help: "基线 APP 的 Link Map；需和 --comparison-link-map 一起使用")
+    var baselineLinkMap: String?
+
+    @Option(help: "对比 APP 的 Link Map；需和 --baseline-link-map 一起使用")
+    var comparisonLinkMap: String?
     
 #if DEBUG
 
@@ -80,12 +86,17 @@ struct MainCommand: AsyncParsableCommand {
             guard let baselineApp, let comparisonApp else {
                 throw ValidationError("--baseline-app 和 --comparison-app 必须同时传入")
             }
+            guard (baselineLinkMap == nil) == (comparisonLinkMap == nil) else {
+                throw ValidationError("--baseline-link-map 和 --comparison-link-map 必须同时传入")
+            }
             guard ipa == nil, modules == nil else {
                 throw ValidationError("对比模式不能同时使用 --ipa 或 --modules")
             }
             try await appAnalyze.compare(
                 baselineAppPath: baselineApp,
-                comparisonAppPath: comparisonApp
+                comparisonAppPath: comparisonApp,
+                baselineLinkMapPath: baselineLinkMap,
+                comparisonLinkMapPath: comparisonLinkMap
             )
         } else if let modules = self.modules {
             appAnalyze.parser = ModuleFileParser(path: modules)

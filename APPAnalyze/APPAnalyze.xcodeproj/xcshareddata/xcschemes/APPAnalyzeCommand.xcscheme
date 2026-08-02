@@ -14,9 +14,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C38105CC2716A9B1000459E1"
-               BuildableName = "JDAPPAnalyzeCommand"
-               BlueprintName = "JDAPPAnalyzeCommand"
+               BlueprintIdentifier = "C311A69D2A6A8B8300271609"
+               BuildableName = "APPAnalyzeCommand"
+               BlueprintName = "APPAnalyzeCommand"
                ReferencedContainer = "container:APPAnalyze.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -28,6 +28,16 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "AA0000080000000000000008"
+               BuildableName = "APPAnalyzeCoreTests.xctest"
+               BlueprintName = "APPAnalyzeCoreTests"
+               ReferencedContainer = "container:APPAnalyze.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
@@ -54,9 +64,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "C38105CC2716A9B1000459E1"
-            BuildableName = "JDAPPAnalyzeCommand"
-            BlueprintName = "JDAPPAnalyzeCommand"
+            BlueprintIdentifier = "C311A69D2A6A8B8300271609"
+            BuildableName = "APPAnalyzeCommand"
+            BlueprintName = "APPAnalyzeCommand"
             ReferencedContainer = "container:APPAnalyze.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -71,9 +81,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "C38105CC2716A9B1000459E1"
-            BuildableName = "JDAPPAnalyzeCommand"
-            BlueprintName = "JDAPPAnalyzeCommand"
+            BlueprintIdentifier = "C311A69D2A6A8B8300271609"
+            BuildableName = "APPAnalyzeCommand"
+            BlueprintName = "APPAnalyzeCommand"
             ReferencedContainer = "container:APPAnalyze.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

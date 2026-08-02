@@ -102,6 +102,207 @@ final class Tests: XCTestCase {
         XCTAssertEqual(components["Removed"]?.total.deltaSize, -40)
     }
 
+    func testPackageComparisonReportsBinaryAndResourceDetails() {
+        let baseline = AppPackageSize(
+            allSize: 100,
+            binarySize: 70,
+            resourceSize: 30,
+            components: [detailedComponent(
+                total: 100,
+                librarySize: 70,
+                libraryFiles: [("Old.o", 20), ("Same.o", 50)],
+                resourceSize: 30,
+                resourceFiles: [("old.png", 10), ("same.dat", 5)],
+                assets: [("Icon", 15)]
+            )]
+        )
+        let comparison = AppPackageSize(
+            allSize: 135,
+            binarySize: 80,
+            resourceSize: 55,
+            components: [detailedComponent(
+                total: 135,
+                librarySize: 80,
+                libraryFiles: [("New.o", 15), ("Same.o", 65)],
+                resourceSize: 55,
+                resourceFiles: [("new.dat", 30), ("same.dat", 5)],
+                assets: [("Icon", 20)]
+            )]
+        )
+
+        let report = APPComparisonReporter.compare(
+            baseline: baseline,
+            comparison: comparison,
+            baselineApp: "Baseline.app",
+            comparisonApp: "Comparison.app"
+        )
+        let binaryDetails = Dictionary(uniqueKeysWithValues: report.binaryDetails.map { ($0.name, $0) })
+        let resourceDetails = Dictionary(uniqueKeysWithValues: report.resourceDetails.map { ($0.name, $0) })
+
+        XCTAssertEqual(binaryDetails["New.o"]?.status, .added)
+        XCTAssertEqual(binaryDetails["New.o"]?.size.deltaSize, 15)
+        XCTAssertEqual(binaryDetails["Same.o"]?.status, .changed)
+        XCTAssertEqual(binaryDetails["Same.o"]?.size.deltaSize, 15)
+        XCTAssertEqual(binaryDetails["Old.o"]?.status, .removed)
+        XCTAssertEqual(binaryDetails["Old.o"]?.size.deltaSize, -20)
+        XCTAssertEqual(resourceDetails["new.dat"]?.status, .added)
+        XCTAssertEqual(resourceDetails["Icon"]?.kind, .asset)
+        XCTAssertEqual(resourceDetails["Icon"]?.size.deltaSize, 5)
+        XCTAssertEqual(resourceDetails["old.png"]?.status, .removed)
+        XCTAssertNil(resourceDetails["same.dat"])
+    }
+
+    func testComparisonReportContainsDetailSections() throws {
+        let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: outputURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+        APPAnalyze.shared.config.reportOutputPath = outputURL.path
+        let package = AppPackageSize(allSize: 0, binarySize: 0, resourceSize: 0, components: [])
+        let report = APPComparisonReporter.compare(
+            baseline: package,
+            comparison: package,
+            baselineApp: "Baseline.app",
+            comparisonApp: "Comparison.app"
+        )
+
+        APPComparisonReporter.generateReport(report)
+
+        let html = try String(contentsOf: outputURL.appendingPathComponent("comparison.html"), encoding: .utf8)
+        let json = try String(contentsOf: outputURL.appendingPathComponent("comparison.json"), encoding: .utf8)
+        XCTAssertTrue(html.contains("二进制增量明细"))
+        XCTAssertTrue(html.contains("资源增量明细"))
+        XCTAssertTrue(html.contains("基线 APP："))
+        XCTAssertTrue(html.contains("对比 APP："))
+        XCTAssertTrue(html.contains("\\n对比 APP："))
+        XCTAssertFalse(html.contains(" → "))
+        XCTAssertTrue(json.contains("binaryDetails"))
+        XCTAssertTrue(json.contains("resourceDetails"))
+    }
+
+    func testLinkMapComparisonReportsChangedAddedAndRemovedObjectFiles() throws {
+        let baselineLinkMap = """
+        # Arch: arm64
+        # Object files:
+        [  0] linker synthesized
+        [  1] /DerivedData/App.build/Objects-normal/arm64/AppDelegate.o
+        [  2] /DerivedData/App.build/libFeature.a(Changed.o)
+        [  3] /DerivedData/App.build/libFeature.a(Removed.o)
+        # Sections:
+        # Address Size Segment Section
+        # Symbols:
+        # Address Size File Name
+        0x1000 0x0000000000000010 [  1] _main
+        0x1010 0x0000000000000008 [  2] _changed_a
+        0x1018 0x0000000000000004 [  2] _changed_b
+        0x101C 0x0000000000000006 [  3] _removed
+        # Dead Stripped Symbols:
+        0x0000 0x0000000000000100 [  1] _unused
+        """
+        let comparisonLinkMap = """
+        # Arch: arm64
+        # Object files:
+        [  0] linker synthesized
+        [  1] /AnotherDerivedData/App.build/Objects-normal/arm64/AppDelegate.o
+        [  2] /AnotherDerivedData/App.build/libFeature.a(Changed.o)
+        [  3] /AnotherDerivedData/App.build/libFeature.a(Added.o)
+        # Sections:
+        # Address Size Segment Section
+        # Symbols:
+        # Address Size File Name
+        0x1000 0x0000000000000010 [  1] _main
+        0x1010 0x0000000000000014 [  2] _changed
+        0x1024 0x0000000000000009 [  3] _added
+        """
+
+        let baselineObjects = try LinkMapParser.parse(
+            content: baselineLinkMap,
+            appName: "App",
+            expectedArch: "arm64"
+        )
+        let comparisonObjects = try LinkMapParser.parse(
+            content: comparisonLinkMap,
+            appName: "App",
+            expectedArch: "arm64"
+        )
+        let baselinePackage = AppPackageSize(
+            allSize: 10,
+            binarySize: 10,
+            resourceSize: 0,
+            components: [binaryComponent(name: "DynamicKit", binary: "DynamicKit", size: 10)]
+        )
+        let comparisonPackage = AppPackageSize(
+            allSize: 15,
+            binarySize: 15,
+            resourceSize: 0,
+            components: [binaryComponent(name: "DynamicKit", binary: "DynamicKit", size: 15)]
+        )
+        let report = APPComparisonReporter.compare(
+            baseline: baselinePackage,
+            comparison: comparisonPackage,
+            baselineApp: "App.app",
+            comparisonApp: "App.app",
+            baselineLinkMap: baselineObjects,
+            comparisonLinkMap: comparisonObjects
+        )
+        let details = Dictionary(uniqueKeysWithValues: report.binaryDetails.map { ($0.name, $0) })
+
+        XCTAssertNil(details["AppDelegate.o"])
+        XCTAssertEqual(details["Changed.o"]?.module, "Feature")
+        XCTAssertEqual(details["Changed.o"]?.container, "libFeature.a")
+        XCTAssertEqual(details["Changed.o"]?.status, .changed)
+        XCTAssertEqual(details["Changed.o"]?.size.baselineSize, 12)
+        XCTAssertEqual(details["Changed.o"]?.size.comparisonSize, 20)
+        XCTAssertEqual(details["Added.o"]?.status, .added)
+        XCTAssertEqual(details["Added.o"]?.size.deltaSize, 9)
+        XCTAssertEqual(details["Removed.o"]?.status, .removed)
+        XCTAssertEqual(details["Removed.o"]?.size.deltaSize, -6)
+        XCTAssertEqual(details["DynamicKit"]?.module, "DynamicKit")
+        XCTAssertEqual(details["DynamicKit"]?.size.deltaSize, 5)
+    }
+
+    func testLinkMapParserRejectsMismatchedArchitecture() {
+        let content = """
+        # Arch: x86_64
+        # Object files:
+        # Symbols:
+        """
+
+        XCTAssertThrowsError(try LinkMapParser.parse(
+            content: content,
+            appName: "App",
+            expectedArch: "arm64"
+        )) { error in
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Link Map 架构为 x86_64，与 --arch arm64 不一致"
+            )
+        }
+    }
+
+    func testLinkMapParserToleratesInvalidUTF8InObjectPath() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        var data = Data("""
+        # Arch: arm64
+        # Object files:
+        [  1] /DerivedData/
+        """.utf8)
+        data.append(0xFF)
+        data.append(Data("""
+        Broken.o
+        # Symbols:
+        # Address Size File Name
+        0x1000 0x000000000000000A [  1] _symbol
+        """.utf8))
+        try data.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let objects = try LinkMapParser.parse(path: url.path, appName: "App", expectedArch: "arm64")
+
+        XCTAssertEqual(objects.count, 1)
+        XCTAssertEqual(objects[0].size, 10)
+        XCTAssertTrue(objects[0].name.hasSuffix("Broken.o"))
+    }
+
     private func component(name: String, total: Int, resource: Int) -> ModulePackageSize {
         ModulePackageSize(
             name: name,
@@ -109,6 +310,46 @@ final class Tests: XCTestCase {
             size: total,
             libraries: [],
             resource: ModuleResourceSize(bundles: [], size: resource)
+        )
+    }
+
+    private func binaryComponent(name: String, binary: String, size: Int) -> ModulePackageSize {
+        ModulePackageSize(
+            name: name,
+            version: nil,
+            size: size,
+            libraries: [MobuleLibrarySize(name: binary, size: size, files: [], frameworks: [])],
+            resource: ModuleResourceSize(bundles: [], size: 0)
+        )
+    }
+
+    private func detailedComponent(
+        total: Int,
+        librarySize: Int,
+        libraryFiles: [(String, Int)],
+        resourceSize: Int,
+        resourceFiles: [(String, Int)],
+        assets: [(String, Int)]
+    ) -> ModulePackageSize {
+        ModulePackageSize(
+            name: "Feature",
+            version: nil,
+            size: total,
+            libraries: [MobuleLibrarySize(
+                name: "Feature.a",
+                size: librarySize,
+                files: libraryFiles.map { LibraryFileSize(name: $0.0, size: $0.1) },
+                frameworks: []
+            )],
+            resource: ModuleResourceSize(
+                bundles: [IbiuComponentSizeResourceBundle(
+                    name: "Feature.bundle",
+                    size: resourceSize,
+                    files: resourceFiles.map { IbiuComponentSizeResourceFile(name: $0.0, size: $0.1) },
+                    assets: assets.map { IbiuComponentSizeResourceAsset(name: $0.0, size: $0.1) }
+                )],
+                size: resourceSize
+            )
         )
     }
 
