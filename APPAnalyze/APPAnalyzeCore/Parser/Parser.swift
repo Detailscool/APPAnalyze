@@ -35,7 +35,17 @@ public struct ModuleInfo: Decodable {
     /// 子依赖
     var dependencies: Set<String>
     
-    let mainModule: Bool
+    var mainModule: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case version
+        case frameworks
+        case libraries
+        case resources
+        case dependencies
+        case mainModule
+    }
 
     public init(name: String, version: String?, frameworks: Set<String>, libraries: Set<String>, resources: Set<String>, dependencies: Set<String>, mainModule: Bool) {
         self.name = name
@@ -45,6 +55,17 @@ public struct ModuleInfo: Decodable {
         self.resources = resources
         self.dependencies = dependencies
         self.mainModule = mainModule
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        version = try container.decodeIfPresent(String.self, forKey: .version)
+        frameworks = try container.decode(Set<String>.self, forKey: .frameworks)
+        libraries = try container.decode(Set<String>.self, forKey: .libraries)
+        resources = try container.decode(Set<String>.self, forKey: .resources)
+        dependencies = try container.decode(Set<String>.self, forKey: .dependencies)
+        mainModule = try container.decodeIfPresent(Bool.self, forKey: .mainModule) ?? false
     }
 }
 

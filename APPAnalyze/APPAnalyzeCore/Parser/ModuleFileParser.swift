@@ -23,7 +23,11 @@ public class ModuleFileParser: Parser {
     public func parse() async -> [ModuleInfo] {
         let data = try! NSData(contentsOfFile: path) as Data
         let json = JSONDecoder()
-        let modules = try! json.decode([ModuleInfo].self, from: data)
+        var modules = try! json.decode([ModuleInfo].self, from: data)
+        // 兼容旧版配置：未声明主模块时，约定第一个模块为主模块。
+        if !modules.isEmpty, !modules.contains(where: { $0.mainModule }) {
+            modules[0].mainModule = true
+        }
         return modules
     }
 }

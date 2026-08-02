@@ -30,7 +30,7 @@
 ``` shell
 $ /Users/Test/APPAnalyzeCommand --help
 OPTIONS:
-  --version <version>     当前版本 1.2.0
+  --version               Show the version.
   --output <output>       输出文件目录。必传参数
   --config <config>       配置JSON文件地址。非必传参数
   --ipa <ipa>             ipa.app文件地址。必传参数
@@ -53,7 +53,7 @@ OPTIONS:
 
 ![截屏2023-09-02 16.48.41.png](https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/36db089d179345a8b39e6996b8903e0a~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=1588&h=862&s=129280&e=png&b=fdfdfd)
 
-##### framework_size.html
+##### module_size.html
 展示单个`framework`所有的包体积数据，`二级页面不要直接打开`。
 
 ![截屏2023-09-02 16.48.52.png](https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/7faf9663980d4b1f95f982ca16082fce~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=3176&h=1640&s=411654&e=png&b=fdfdfd)
@@ -172,28 +172,32 @@ OPTIONS:
 	"resources": [], // 资源文件路径
 	"name": "APPModule", // 模块名
 	"dependencies": ["OrderModule", "CartModule"], // 模块子模块依赖
-	"version": "1.1.0" // 模块版本
+	"version": "1.1.0", // 模块版本
+	"mainModule": true // 是否为主模块；省略时默认将第一个模块作为主模块
 }, {
 	"frameworks": ["/Users/test/AppModule/Example/Pods/OrderModule/OrderModule.framework"],
 	"libraries": [],
 	"resources": ["/Users/test/AppModule/Example/Pods/CartModule/Resources/Order.bundle"],
 	"name": "OrderModule",
 	"dependencies": ["JDUIKit"],
-	"version": "1.0.4"
+	"version": "1.0.4",
+	"mainModule": false
 }, {
 	"frameworks": [],
 	"libraries": ["/Users/test/AppModule/Example/Pods/CartModule/CartModule.a"],
 	"resources": ["/Users/test/AppModule/Example/Pods/CartModule/Resources/Cart.xcassets"],
 	"name": "CartModule",
 	"dependencies": ["JDUIKit"],
-	"version": "1.0.5"
+	"version": "1.0.5",
+	"mainModule": false
 }, {
 	"frameworks": ["/Users/test/AppModule/Example/Pods/JDUIKit/JDUIKit.framework"],
 	"libraries": [],
 	"resources": ["/Users/test/AppModule/Example/Pods/JDUIKit/Resources"],
 	"name": "JDUIKit",
 	"dependencies": [],
-	"version": "1.0.0"
+	"version": "1.0.0",
+	"mainModule": false
 }]
 ```
 基于组件化扫描方式有以下优势：

@@ -98,7 +98,7 @@ enum UnusedObjCMethodRule: Rule {
                 if otherComponent.allDependencies.contains(component.name) {
                     for library in otherComponent.libraries {
                         selRefs = selRefs.union(library.selrefs)
-                        usedStrings = selRefs.union(library.usedStrings)
+                        usedStrings = usedStrings.union(library.usedStrings)
                     }
                 }
             }

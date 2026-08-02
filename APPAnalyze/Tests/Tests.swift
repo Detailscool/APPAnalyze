@@ -6,19 +6,11 @@
 //
 
 import XCTest
-import SwiftDemangle
+@testable import APPAnalyzeCore
 
 final class Tests: XCTestCase {
 
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
-    func testExample() throws {
+    func testClassDemangling() throws {
         let a = "s16pgHomePageModule06PGMainC16_5009021_SubCell33_C4CD798CB5F3BA52699FDA71B41D3DB3LLC18walletBenefitLabelSo7UILabelCvpfiAGyXEfU_".classDemangling()
         XCTAssert(a.contains("pgHomePageModule.(PGMainPage_5009021_SubCell in _C4CD798CB5F3BA52699FDA71B41D3DB3)"))
         //
@@ -26,11 +18,48 @@ final class Tests: XCTestCase {
         XCTAssert(b == ["pgPingouDetailModule.ShareInfoModel.Data"])
     }
 
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        measure {
-            // Put the code you want to measure the time of here.
-        }
+    func testModuleInfoDecodesWithoutMainModuleForBackwardCompatibility() throws {
+        let data = Data(#"{"name":"App","frameworks":[],"libraries":[],"resources":[],"dependencies":[]}"#.utf8)
+
+        let module = try JSONDecoder().decode(ModuleInfo.self, from: data)
+
+        XCTAssertFalse(module.mainModule)
+    }
+
+    func testModuleFileParserTreatsFirstLegacyModuleAsMainModule() async throws {
+        let data = Data(#"[{"name":"App","frameworks":[],"libraries":[],"resources":[],"dependencies":[]}]"#.utf8)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try data.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let modules = await ModuleFileParser(path: url.path).parse()
+
+        XCTAssertEqual(modules.count, 1)
+        XCTAssertTrue(modules[0].mainModule)
+    }
+
+    func testUnusedObjCPropertyRuleIsDisabledByDefault() {
+        XCTAssertFalse(Configuration().unusedObjCPropertyRule.enable)
+    }
+
+    func testTransitiveDependenciesIncludeEveryLevelAndExcludeSelf() {
+        let app = Module()
+        app.name = "App"
+        app.dependencies = ["Feature"]
+        let feature = Module()
+        feature.name = "Feature"
+        feature.dependencies = ["Service"]
+        let service = Module()
+        service.name = "Service"
+        service.dependencies = ["Core"]
+        let core = Module()
+        core.name = "Core"
+        core.dependencies = ["App"]
+
+        ModuleParser.calculateAllDependencies(modules: [app, feature, service, core])
+
+        XCTAssertEqual(app.allDependencies, ["Feature", "Service", "Core"])
+        XCTAssertFalse(app.allDependencies.contains("App"))
     }
 
 }

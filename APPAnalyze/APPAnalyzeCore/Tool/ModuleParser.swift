@@ -38,23 +38,7 @@ enum ModuleParser {
 
             return frameworks
         }
-        // 计算每个模块的所有依赖
-        for component in frameworks {
-            var allDependencies: Set<String> = []
-            for name in component.dependencies {
-                allDependencies.insert(name)
-                //
-                let component = frameworks.first(where: { $0.name == name })
-                component?.dependencies.forEach { name2 in
-                    allDependencies.insert(name2)
-                }
-            }
-            component.allDependencies = allDependencies
-            //
-            var dependencies = component.dependencies
-            dependencies.remove(component.name)
-            component.dependencies = dependencies
-        }
+        calculateAllDependencies(modules: frameworks)
         //
         for framework in frameworks {
             // 查找自己被哪些模块依赖
@@ -69,6 +53,29 @@ enum ModuleParser {
         APP.shared.calculateAllSuperClassAndProtocol()
         //
         APPAnalyze.shared.reporterManager.generateReport(data: modules.data, fileName: "modules.json")
+    }
+
+    static func calculateAllDependencies(modules: [Module]) {
+        // 先移除自依赖，再计算每个模块完整的传递依赖。
+        for component in modules {
+            var dependencies = component.dependencies
+            dependencies.remove(component.name)
+            component.dependencies = dependencies
+        }
+        let modulesByName = Dictionary(modules.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        for component in modules {
+            var allDependencies: Set<String> = []
+            var pendingDependencies = Array(component.dependencies)
+            while let dependencyName = pendingDependencies.popLast() {
+                guard dependencyName != component.name,
+                      allDependencies.insert(dependencyName).inserted,
+                      let dependency = modulesByName[dependencyName] else {
+                    continue
+                }
+                pendingDependencies.append(contentsOf: dependency.dependencies)
+            }
+            component.allDependencies = allDependencies
+        }
     }
 
     private static func parseSystemFramework(path: String) async -> Module {

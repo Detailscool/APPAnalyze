@@ -38,7 +38,7 @@ struct UnusedObjCPropertyRuleConfig {
 
 extension Configuration {
     var unusedObjCPropertyRule: UnusedObjCPropertyRuleConfig {
-        let enable = rules?["unusedObjCProperty"]["enable"].bool ?? true
+        let enable = rules?["unusedObjCProperty"]["enable"].bool ?? false
         let excludeTypes = Set(rules?["unusedObjCProperty"]["excludeTypes"].arrayObject as? [String] ?? [])
         return UnusedObjCPropertyRuleConfig(enable: enable, excludeTypes: excludeTypes)
     }

@@ -11,9 +11,9 @@ import Foundation
 
 @main
 struct MainCommand: AsyncParsableCommand {
-//    #if RELEASE
-        @Option(help: "当前版本1.3.1")
-        var version: String?
+    static let configuration = CommandConfiguration(
+        version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+    )
     
 #if DEBUG
 
