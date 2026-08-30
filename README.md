@@ -38,6 +38,7 @@ OPTIONS:
   --comparison-app <path> 对比 .app 文件路径
   --baseline-link-map <path>   基线 APP 的 Link Map
   --comparison-link-map <path> 对比 APP 的 Link Map
+  --increment-threshold <value> 增量报告输出阈值，单位为 B，默认 100B
   -h, --help              Show help information.
 ```
 ### 执行
@@ -51,6 +52,8 @@ OPTIONS:
 ### 包体积对比
 
 同时传入基线 APP 和对比 APP，可以生成包体积增量报告。对比模式只计算包体积，不执行问题扫描规则。
+
+增量报告默认不输出绝对增量小于 `100B` 的模块和明细，可通过 `--increment-threshold` 自定义阈值（单位：B）；传入 `0` 可输出所有增量。
 
 ``` shell
 /Users/Test/APPAnalyzeCommand \

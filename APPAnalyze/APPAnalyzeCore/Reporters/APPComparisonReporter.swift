@@ -236,8 +236,10 @@ enum APPComparisonReporter {
         baselineApp: String,
         comparisonApp: String,
         baselineLinkMap: [LinkMapObjectSize]? = nil,
-        comparisonLinkMap: [LinkMapObjectSize]? = nil
+        comparisonLinkMap: [LinkMapObjectSize]? = nil,
+        incrementThreshold: Int = 100
     ) -> APPSizeComparisonReport {
+        let incrementThreshold = max(0, incrementThreshold)
         let baselineComponents = Dictionary(
             baseline.components.map { ($0.name, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -275,6 +277,10 @@ enum APPComparisonReporter {
                 resource: increment(baseline: baselineResource, comparison: comparisonResource)
             )
         }
+        .filter { component in
+            [component.total.deltaSize, component.binary.deltaSize, component.resource.deltaSize]
+                .contains { abs($0) >= incrementThreshold }
+        }
         components.sort {
             if $0.total.deltaSize == $1.total.deltaSize {
                 return $0.name < $1.name
@@ -291,11 +297,13 @@ enum APPComparisonReporter {
             components: components,
             binaryDetails: compareDetails(
                 baseline: binaryDetails(package: baseline, linkMap: baselineLinkMap),
-                comparison: binaryDetails(package: comparison, linkMap: comparisonLinkMap)
+                comparison: binaryDetails(package: comparison, linkMap: comparisonLinkMap),
+                incrementThreshold: incrementThreshold
             ),
             resourceDetails: compareDetails(
                 baseline: resourceDetails(package: baseline),
-                comparison: resourceDetails(package: comparison)
+                comparison: resourceDetails(package: comparison),
+                incrementThreshold: incrementThreshold
             )
         )
     }
@@ -319,12 +327,12 @@ enum APPComparisonReporter {
         const report=\(json);
         const statuses={added:'新增',removed:'删除',changed:'变化',unchanged:'未变化'};
         const kinds={binary:'二进制',resource:'文件',asset:'ImageSet/DataSet'};
-        function size(value){const sign=value>0?'+':value<0?'-':'';let n=Math.abs(value);if(n<1000)return sign+n+'B';n=n/1000;if(n<1000)return sign+n.toFixed(1)+'KB';return sign+(n/1000).toFixed(2)+'MB'}
+        function size(value,signed=false){const sign=value<0?'-':(signed&&value>0?'+':'');let n=Math.abs(value);if(n<1000)return sign+n+'B';n=n/1000;if(n<1000)return sign+n.toFixed(1)+'KB';return sign+(n/1000).toFixed(2)+'MB'}
         function percent(item){if(item.deltaPercent===null||item.deltaPercent===undefined)return'-';const sign=item.deltaPercent>0?'+':'';return sign+item.deltaPercent.toFixed(2)+'%'}
         function cls(value){return value>0?'positive':value<0?'negative':'zero'}
-        function summaryRow(name,item){return `<tr><td class="left">${name}</td><td>${size(item.baselineSize)}</td><td>${size(item.comparisonSize)}</td><td class="${cls(item.deltaSize)}">${size(item.deltaSize)}</td><td class="${cls(item.deltaSize)}">${percent(item)}</td></tr>`}
-        function detailRows(items){if(items.length===0)return '<tr><td colspan="9" class="empty">无增量明细</td></tr>';return items.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.module}</td><td class="left">${item.container||'-'}</td><td class="left">${item.name}</td><td>${kinds[item.kind]}</td><td><span class="tag">${statuses[item.status]}</span></td><td>${size(item.size.baselineSize)}</td><td>${size(item.size.comparisonSize)}</td><td class="${cls(item.size.deltaSize)}">${size(item.size.deltaSize)} (${percent(item.size)})</td></tr>`).join('')}
-        function onLoad(){document.getElementById('apps').textContent='基线 APP：'+report.baselineApp+'\\n对比 APP：'+report.comparisonApp;document.getElementById('summary').innerHTML=summaryRow('总大小',report.total)+summaryRow('二进制',report.binary)+summaryRow('资源',report.resource);document.getElementById('components').innerHTML=report.components.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.name}</td><td><span class="tag">${statuses[item.status]}</span></td><td>${size(item.total.baselineSize)}</td><td>${size(item.total.comparisonSize)}</td><td class="${cls(item.total.deltaSize)}">${size(item.total.deltaSize)}</td><td class="${cls(item.binary.deltaSize)}">${size(item.binary.deltaSize)}</td><td class="${cls(item.resource.deltaSize)}">${size(item.resource.deltaSize)}</td><td>${percent(item.total)}</td></tr>`).join('');document.getElementById('binaryDetails').innerHTML=detailRows(report.binaryDetails);document.getElementById('resourceDetails').innerHTML=detailRows(report.resourceDetails)}
+        function summaryRow(name,item){return `<tr><td class="left">${name}</td><td>${size(item.baselineSize)}</td><td>${size(item.comparisonSize)}</td><td class="${cls(item.deltaSize)}">${size(item.deltaSize,true)}</td><td class="${cls(item.deltaSize)}">${percent(item)}</td></tr>`}
+        function detailRows(items){if(items.length===0)return '<tr><td colspan="9" class="empty">无增量明细</td></tr>';return items.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.module}</td><td class="left">${item.container||'-'}</td><td class="left">${item.name}</td><td>${kinds[item.kind]}</td><td><span class="tag">${statuses[item.status]}</span></td><td>${size(item.size.baselineSize)}</td><td>${size(item.size.comparisonSize)}</td><td class="${cls(item.size.deltaSize)}">${size(item.size.deltaSize,true)} (${percent(item.size)})</td></tr>`).join('')}
+        function onLoad(){document.getElementById('apps').textContent='基线 APP：'+report.baselineApp+'\\n对比 APP：'+report.comparisonApp;document.getElementById('summary').innerHTML=summaryRow('总大小',report.total)+summaryRow('二进制',report.binary)+summaryRow('资源',report.resource);document.getElementById('components').innerHTML=report.components.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.name}</td><td><span class="tag">${statuses[item.status]}</span></td><td>${size(item.total.baselineSize)}</td><td>${size(item.total.comparisonSize)}</td><td class="${cls(item.total.deltaSize)}">${size(item.total.deltaSize,true)}</td><td class="${cls(item.binary.deltaSize)}">${size(item.binary.deltaSize,true)}</td><td class="${cls(item.resource.deltaSize)}">${size(item.resource.deltaSize,true)}</td><td>${percent(item.total)}</td></tr>`).join('');document.getElementById('binaryDetails').innerHTML=detailRows(report.binaryDetails);document.getElementById('resourceDetails').innerHTML=detailRows(report.resourceDetails)}
         </script></head>
         <body onload="onLoad()"><h1>APP 包体积增量报告</h1><p id="apps" class="app-paths"></p>
         <h2>总体变化</h2><table><thead><tr><th class="left">类型</th><th>基线</th><th>对比</th><th>增量</th><th>增幅</th></tr></thead><tbody id="summary"></tbody></table>
@@ -416,7 +424,8 @@ enum APPComparisonReporter {
 
     private static func compareDetails(
         baseline: [String: SizeDetailItem],
-        comparison: [String: SizeDetailItem]
+        comparison: [String: SizeDetailItem],
+        incrementThreshold: Int
     ) -> [SizeDetailIncrement] {
         let keys = Set(baseline.keys).union(comparison.keys)
         var details = keys.compactMap { key -> SizeDetailIncrement? in
@@ -424,7 +433,8 @@ enum APPComparisonReporter {
             let comparisonItem = comparison[key]
             let baselineSize = baselineItem?.size ?? 0
             let comparisonSize = comparisonItem?.size ?? 0
-            guard baselineSize != comparisonSize else {
+            let deltaSize = comparisonSize - baselineSize
+            guard deltaSize != 0, abs(deltaSize) >= incrementThreshold else {
                 return nil
             }
             let item = comparisonItem ?? baselineItem!

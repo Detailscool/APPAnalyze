@@ -26,6 +26,9 @@ struct MainCommand: AsyncParsableCommand {
 
     @Option(help: "对比 APP 的 Link Map；需和 --baseline-link-map 一起使用")
     var comparisonLinkMap: String?
+
+    @Option(help: "增量报告输出阈值，单位为 B，默认 100B；绝对增量小于该值的模块和明细不输出")
+    var incrementThreshold: Int = 100
     
 #if DEBUG
 
@@ -92,11 +95,15 @@ struct MainCommand: AsyncParsableCommand {
             guard ipa == nil, modules == nil else {
                 throw ValidationError("对比模式不能同时使用 --ipa 或 --modules")
             }
+            guard incrementThreshold >= 0 else {
+                throw ValidationError("--increment-threshold 不能小于 0")
+            }
             try await appAnalyze.compare(
                 baselineAppPath: baselineApp,
                 comparisonAppPath: comparisonApp,
                 baselineLinkMapPath: baselineLinkMap,
-                comparisonLinkMapPath: comparisonLinkMap
+                comparisonLinkMapPath: comparisonLinkMap,
+                incrementThreshold: incrementThreshold
             )
         } else if let modules = self.modules {
             appAnalyze.parser = ModuleFileParser(path: modules)

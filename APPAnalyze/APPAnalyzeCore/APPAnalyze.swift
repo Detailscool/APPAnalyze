@@ -46,7 +46,8 @@ public class APPAnalyze {
         baselineAppPath: String,
         comparisonAppPath: String,
         baselineLinkMapPath: String? = nil,
-        comparisonLinkMapPath: String? = nil
+        comparisonLinkMapPath: String? = nil,
+        incrementThreshold: Int = 100
     ) async throws {
         parser = IPAParser(appPath: baselineAppPath)
         config.check()
@@ -66,7 +67,8 @@ public class APPAnalyze {
             baselineApp: URL(fileURLWithPath: baselineAppPath).standardizedFileURL.path,
             comparisonApp: URL(fileURLWithPath: comparisonAppPath).standardizedFileURL.path,
             baselineLinkMap: baselineLinkMap,
-            comparisonLinkMap: comparisonLinkMap
+            comparisonLinkMap: comparisonLinkMap,
+            incrementThreshold: incrementThreshold
         )
         try FileManager.default.createDirectory(
             atPath: config.reportOutputPath,

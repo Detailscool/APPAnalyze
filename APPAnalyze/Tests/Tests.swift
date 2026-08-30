@@ -86,7 +86,8 @@ final class Tests: XCTestCase {
             baseline: baseline,
             comparison: comparison,
             baselineApp: "Baseline.app",
-            comparisonApp: "Comparison.app"
+            comparisonApp: "Comparison.app",
+            incrementThreshold: 0
         )
         let components = Dictionary(uniqueKeysWithValues: report.components.map { ($0.name, $0) })
 
@@ -100,6 +101,57 @@ final class Tests: XCTestCase {
         XCTAssertEqual(components["Added"]?.total.deltaSize, 50)
         XCTAssertEqual(components["Removed"]?.status, .removed)
         XCTAssertEqual(components["Removed"]?.total.deltaSize, -40)
+    }
+
+    func testPackageComparisonFiltersIncrementsBelowThreshold() {
+        let baseline = AppPackageSize(
+            allSize: 600,
+            binarySize: 360,
+            resourceSize: 240,
+            components: [
+                detailedComponent(
+                    total: 500,
+                    librarySize: 300,
+                    libraryFiles: [("Small.o", 50), ("Exact.o", 100), ("Removed.o", 150)],
+                    resourceSize: 200,
+                    resourceFiles: [("Small.dat", 50), ("Removed.dat", 150)],
+                    assets: []
+                ),
+                component(name: "Unchanged", total: 100, resource: 40),
+            ]
+        )
+        let comparison = AppPackageSize(
+            allSize: 800,
+            binarySize: 560,
+            resourceSize: 240,
+            components: [
+                detailedComponent(
+                    total: 700,
+                    librarySize: 500,
+                    libraryFiles: [("Small.o", 120), ("Exact.o", 200), ("Added.o", 180)],
+                    resourceSize: 200,
+                    resourceFiles: [("Small.dat", 120), ("Added.dat", 80)],
+                    assets: []
+                ),
+                component(name: "Unchanged", total: 100, resource: 40),
+            ]
+        )
+
+        let report = APPComparisonReporter.compare(
+            baseline: baseline,
+            comparison: comparison,
+            baselineApp: "Baseline.app",
+            comparisonApp: "Comparison.app"
+        )
+        let binaryDetails = Dictionary(uniqueKeysWithValues: report.binaryDetails.map { ($0.name, $0) })
+        let resourceDetails = Dictionary(uniqueKeysWithValues: report.resourceDetails.map { ($0.name, $0) })
+
+        XCTAssertEqual(report.components.map { $0.name }, ["Feature"])
+        XCTAssertEqual(Set(binaryDetails.keys), Set(["Added.o", "Exact.o", "Removed.o"]))
+        XCTAssertEqual(binaryDetails["Exact.o"]?.size.deltaSize, 100)
+        XCTAssertEqual(binaryDetails["Removed.o"]?.size.deltaSize, -150)
+        XCTAssertEqual(Set(resourceDetails.keys), Set(["Removed.dat"]))
+        XCTAssertEqual(resourceDetails["Removed.dat"]?.size.deltaSize, -150)
     }
 
     func testPackageComparisonReportsBinaryAndResourceDetails() {
@@ -134,7 +186,8 @@ final class Tests: XCTestCase {
             baseline: baseline,
             comparison: comparison,
             baselineApp: "Baseline.app",
-            comparisonApp: "Comparison.app"
+            comparisonApp: "Comparison.app",
+            incrementThreshold: 0
         )
         let binaryDetails = Dictionary(uniqueKeysWithValues: report.binaryDetails.map { ($0.name, $0) })
         let resourceDetails = Dictionary(uniqueKeysWithValues: report.resourceDetails.map { ($0.name, $0) })
@@ -242,7 +295,8 @@ final class Tests: XCTestCase {
             baselineApp: "App.app",
             comparisonApp: "App.app",
             baselineLinkMap: baselineObjects,
-            comparisonLinkMap: comparisonObjects
+            comparisonLinkMap: comparisonObjects,
+            incrementThreshold: 0
         )
         let details = Dictionary(uniqueKeysWithValues: report.binaryDetails.map { ($0.name, $0) })
 
