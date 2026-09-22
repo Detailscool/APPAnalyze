@@ -21,12 +21,27 @@ public let PackedAssetImage = "PackedAssetImage"
 
 enum AssetsCarTool {
     private static func getAssetsInfo(path: String) -> [AssetsItem] {
-        let output = Command.shell(in: APPAnalyze.shared.config.currentDirectoryPath, launchPath: "/usr/bin/assetutil", arguments: ["--info", path], encoding: .isoLatin1)
-        let data = output.data(using: .utf8)!
-        //
-        let decoder = JSONDecoder()
-        let assets = try! decoder.decode([AssetsItem].self, from: data)
-        return assets
+        let output = Command.shell(
+            in: APPAnalyze.shared.config.currentDirectoryPath,
+            launchPath: "/usr/bin/assetutil",
+            arguments: ["--info", path],
+            encoding: .isoLatin1
+        )
+
+        guard let data = output.data(using: .utf8) else {
+            print("❌ assetutil output cannot convert to UTF8: \(path)")
+            return []
+        }
+
+        do {
+            return try JSONDecoder().decode([AssetsItem].self, from: data)
+        } catch {
+            print("❌ decode assetutil failed")
+            print("path: \(path)")
+            print("error: \(error)")
+            print("output: \(output)")
+            return []
+        }
     }
 
     /// 解析Assets.car
@@ -41,7 +56,7 @@ enum AssetsCarTool {
         var imageSetName = ""
         var imageScales: Set<Int> = []
         //
-        let assetsCarName = URL(string: path)!.lastPathComponent
+        let assetsCarName = URL(fileURLWithPath: path).lastPathComponent
         //
         var packedImageSize = 0
         //
@@ -69,10 +84,21 @@ enum AssetsCarTool {
                     }
                     //
                     if !imageScales.contains(Scale) {
-                        let scale = ImagesetScale(scale: Scale)!
-                        let image = ResourceImageSetImage(filename: RenditionName, scale: scale, size: SizeOnDisk, path: nil)
+                        guard let scale = ImagesetScale(scale: Scale) else {
+                            print("❌ unsupported image scale: \(Scale)")
+                            print("   Name: \(Name)")
+                            print("   RenditionName: \(RenditionName)")
+                            print("   Assets.car: \(path)")
+                            continue
+                        }
+
+                        let image = ResourceImageSetImage(
+                            filename: RenditionName,
+                            scale: scale,
+                            size: SizeOnDisk,
+                            path: nil
+                        )
                         images.append(image)
-                        //
                         imageScales.insert(Scale)
                     }
                     //
