@@ -48,7 +48,7 @@ enum MachoTool {
     /// - Returns: 二进制库信息
     static func getMachoInfo(path: String, dynamic: Bool, arch: ArchType) async -> MachO {
         let machoPath = path
-        let machoName = URL(string: path)!.lastPathComponent
+        let machoName = URL(fileURLWithPath: path).lastPathComponent
         // Swift使用类查找
         let swiftClassRefs = APPAnalyze.shared.config.unusedClassRule.swiftEnable
         let objcIvars = APPAnalyze.shared.config.unusedObjCPropertyRule.enable

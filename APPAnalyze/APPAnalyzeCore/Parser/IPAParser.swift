@@ -25,7 +25,7 @@ public class IPAParser: Parser {
     }
     
     public func parse() async -> [ModuleInfo] {
-        var target = URL(string: appPath)!.lastPathComponent
+        var target = URL(fileURLWithPath: appPath).lastPathComponent
         if target.hasSuffix(".app") {
             let endIndex = target.index(target.endIndex, offsetBy: -4)
             target = String(target[target.startIndex..<endIndex])

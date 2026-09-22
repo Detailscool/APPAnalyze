@@ -18,8 +18,8 @@ public extension Encodable {
 }
 
 public func log(_ message: String, file: String = #file, line: Int = #line) {
-    let url = URL(string: file)
-    let filename = url?.lastPathComponent ?? ""
+    let url = URL(fileURLWithPath: file)
+    let filename = url.lastPathComponent
 //    os_log(message, type: .info)
     print("\(filename)-\(line):\(message)")
 }

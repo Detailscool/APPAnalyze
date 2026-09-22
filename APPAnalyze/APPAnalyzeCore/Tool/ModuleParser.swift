@@ -23,9 +23,8 @@ enum ModuleParser {
             let systemFrameworksPath = APPAnalyze.shared.config.customConfig?["systemFrameworkPaths"].arrayObject as? [String] ?? []
             for path in systemFrameworksPath {
                 taskGroup.addTask {
-                    if let frameworkName = URL(string: path)?.lastPathComponent {
-                        print("\(frameworkName):解析系统库")
-                    }
+                    let frameworkName = URL(fileURLWithPath: path).lastPathComponent
+                    print("\(frameworkName):解析系统库")
                     let framework = await parseSystemFramework(path: path)
                     return framework
                 }
@@ -104,7 +103,7 @@ enum ModuleParser {
         let libraries = await withTaskGroup(of: MachO.self) { taskGroup in
             // 解析 framework 的 macho
             for frameworkPath in module.frameworks {
-                let frameworkName = URL(string: frameworkPath)!.lastPathComponent.components(separatedBy: ".").first!
+                let frameworkName = URL(fileURLWithPath: frameworkPath).lastPathComponent.components(separatedBy: ".").first!
                 let machoPath = "\(frameworkPath)/\(frameworkName)"
                 taskGroup.addTask {
                     let library = await MachoTool.getMachoInfo(path: machoPath, dynamic: true, arch: archType)

@@ -78,7 +78,7 @@ struct MainCommand: AsyncParsableCommand {
         let analyzeConfig = appAnalyze.config
         analyzeConfig.archType = ArchType(rawValue: arch) ?? .arm64
         var currentDirectoryPath = CommandLine.arguments[0]
-        var url = URL(string: currentDirectoryPath)!
+        var url = URL(fileURLWithPath: currentDirectoryPath)
         url.deleteLastPathComponent()
         currentDirectoryPath = url.absoluteString
         analyzeConfig.currentDirectoryPath = currentDirectoryPath
