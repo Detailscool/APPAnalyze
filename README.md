@@ -53,6 +53,8 @@ OPTIONS:
 
 同时传入基线 APP 和对比 APP，可以生成包体积增量报告。对比模式只计算包体积，不执行问题扫描规则。
 
+对比报告的大小按解压后的 `.app` 目录内各文件的实际字节数统计（包含二进制、`Assets.car`、扩展和签名文件）。`二进制`按 Mach-O 文件识别，其余文件计入`资源`；目录本身及文件系统分配块不计入。模块总量之和与 APP 总大小一致。Link Map 的对象文件大小仅用于二进制增量明细，不参与 APP 总大小计算。
+
 增量报告默认不输出绝对增量小于 `100B` 的模块和明细，可通过 `--increment-threshold` 自定义阈值（单位：B）；传入 `0` 可输出所有增量。
 
 ``` shell
@@ -79,7 +81,7 @@ OPTIONS:
 输出文件：
 
 - `comparison.html`：总大小、模块、二进制文件和资源文件的增量报告。
-- `comparison.json`：包含模块、库/目标文件、Bundle 资源及 ImageSet/DataSet 明细，适合 CI 和数据平台消费。
+- `comparison.json`：包含模块、Link Map 对象文件、实际资源文件及 `Assets.car` 内 ImageSet 的增量明细，适合 CI 和数据平台消费。ImageSet 是素材级展开明细，不与 `Assets.car` 文件大小叠加。
 
 ### 生成产物
 ![截屏2023-09-02 16.15.12.png](https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/fa71a13c996747089246d7c871cd6130~tplv-k3u1fbpfcp-jj-mark:0:0:0:0:q75.image#?w=980&h=304&s=55650&e=png&a=1&b=fefefe)

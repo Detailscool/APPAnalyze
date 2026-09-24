@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Darwin
 
 enum ComponentChangeStatus: String, Encodable, Equatable {
     case added
@@ -207,10 +208,27 @@ enum LinkMapParser {
             let objectStart = path.index(after: openingParenthesis)
             let objectEnd = path.index(before: path.endIndex)
             let objectName = String(path[objectStart..<objectEnd])
-            let container = URL(fileURLWithPath: archivePath).lastPathComponent
-            var module = container
+            let archiveURL = URL(fileURLWithPath: archivePath)
+            let archiveName = archiveURL.lastPathComponent
+            let frameworkURL = archiveURL.deletingLastPathComponent()
+            let container = frameworkURL.pathExtension == "framework"
+                ? "\(frameworkURL.lastPathComponent)/\(archiveName)"
+                : archiveName
+            var module = archiveName
             if module.hasPrefix("lib") { module.removeFirst(3) }
             if module.hasSuffix(".a") { module.removeLast(2) }
+            if frameworkURL.pathExtension == "framework" {
+                module = frameworkURL.deletingPathExtension().lastPathComponent
+            }
+            let pathParts = archiveURL.pathComponents
+            if let buildProductsIndex = pathParts.lastIndex(of: "BuildProductsPath"),
+               buildProductsIndex + 2 < pathParts.count {
+                let productName = pathParts[buildProductsIndex + 2]
+                if productName != archiveName, !productName.hasSuffix(".framework"),
+                   !productName.hasSuffix(".a") {
+                    module = productName
+                }
+            }
             return (module.isEmpty ? appName : module, container, objectName)
         }
         return (appName, "", URL(fileURLWithPath: path).lastPathComponent)
@@ -229,7 +247,196 @@ private struct SizeDetailItem {
     }
 }
 
+private struct PackageFile {
+    let path: String
+    let size: Int
+    let isBinary: Bool
+    let assetImages: [IbiuComponentSizeResourceAsset]
+
+    var bundleName: String {
+        path.split(separator: "/").first(where: { $0.hasSuffix(".bundle") }).map(String.init) ?? MainBundleName
+    }
+}
+
+private enum PackageSizeError: LocalizedError {
+    case invalidApp(String)
+    case unreadableFile(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidApp(let path): return "APP 目录不存在或无法读取：\(path)"
+        case .unreadableFile(let path): return "无法读取 APP 文件：\(path)"
+        }
+    }
+}
+
 enum APPComparisonReporter {
+    /// 对比模式以 APP 内每个文件的实际字节数为准；符号和素材分析只用于明细。
+    static func packageSize(appPath: String) throws -> AppPackageSize {
+        let appURL = URL(fileURLWithPath: appPath).resolvingSymlinksInPath().standardizedFileURL
+        let appName = appURL.deletingPathExtension().lastPathComponent
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: appURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw PackageSizeError.invalidApp(appPath)
+        }
+
+        var enumerationError: Error?
+        guard let enumerator = fileManager.enumerator(
+            at: appURL,
+            includingPropertiesForKeys: nil,
+            errorHandler: { _, error in
+                enumerationError = error
+                return false
+            }
+        ) else {
+            throw PackageSizeError.invalidApp(appPath)
+        }
+
+        var filesByModule: [String: [PackageFile]] = [:]
+        for case let url as URL in enumerator {
+            var fileStatus = stat()
+            guard lstat(url.path, &fileStatus) == 0 else {
+                throw PackageSizeError.unreadableFile(url.path)
+            }
+            let fileType = fileStatus.st_mode & mode_t(S_IFMT)
+            guard fileType == mode_t(S_IFREG) || fileType == mode_t(S_IFLNK) else {
+                continue
+            }
+            let relativePath = url.pathComponents.suffix(enumerator.level).joined(separator: "/")
+            let parts = relativePath.split(separator: "/").map(String.init)
+            let module = moduleName(for: parts, appName: appName)
+            let isBinary: Bool
+            if fileType == mode_t(S_IFREG) {
+                isBinary = try isMachO(at: url)
+            } else {
+                isBinary = false
+            }
+            let assetImages: [IbiuComponentSizeResourceAsset]
+            if !isBinary, url.lastPathComponent == "Assets.car", try isAssetCatalog(at: url) {
+                let (imageSets, _) = AssetsCarTool.parseAssets(path: url.path)
+                assetImages = imageSets.map {
+                    IbiuComponentSizeResourceAsset(name: $0.name, size: $0.size)
+                }.sorted { $0.name < $1.name }
+            } else {
+                assetImages = []
+            }
+            filesByModule[module, default: []].append(PackageFile(
+                path: relativePath,
+                size: Int(fileStatus.st_size),
+                isBinary: isBinary,
+                assetImages: assetImages
+            ))
+        }
+        if let enumerationError {
+            throw enumerationError
+        }
+
+        var totalBinary = 0
+        var totalResource = 0
+        var components: [ModulePackageSize] = []
+        for (name, files) in filesByModule {
+            let component = componentSize(name: name, files: files)
+            components.append(component)
+            totalBinary += component.size - component.resource.size
+            totalResource += component.resource.size
+        }
+        components.sort { $0.size == $1.size ? $0.name < $1.name : $0.size > $1.size }
+
+        return AppPackageSize(
+            allSize: totalBinary + totalResource,
+            binarySize: totalBinary,
+            resourceSize: totalResource,
+            components: components
+        )
+    }
+
+    private static func componentSize(name: String, files: [PackageFile]) -> ModulePackageSize {
+        var libraries: [MobuleLibrarySize] = []
+        var resourceFilesByBundle: [String: [IbiuComponentSizeResourceFile]] = [:]
+        var assetCatalogs: [IbiuComponentSizeResourceBundle] = []
+        for file in files {
+            if file.isBinary {
+                libraries.append(MobuleLibrarySize(name: file.path, size: file.size, files: [], frameworks: []))
+            } else {
+                resourceFilesByBundle[file.bundleName, default: []].append(
+                    IbiuComponentSizeResourceFile(name: file.path, size: file.size)
+                )
+                if !file.assetImages.isEmpty {
+                    assetCatalogs.append(IbiuComponentSizeResourceBundle(
+                        name: file.path,
+                        size: 0,
+                        files: [],
+                        assets: file.assetImages
+                    ))
+                }
+            }
+        }
+        libraries.sort { $0.name < $1.name }
+        let binarySize = libraries.reduce(0) { $0 + $1.size }
+        var bundles: [IbiuComponentSizeResourceBundle] = []
+        for (bundleName, var resourceFiles) in resourceFilesByBundle {
+            resourceFiles.sort { $0.name < $1.name }
+            let size = resourceFiles.reduce(0) { $0 + $1.size }
+            bundles.append(IbiuComponentSizeResourceBundle(
+                name: bundleName,
+                size: size,
+                files: resourceFiles,
+                assets: []
+            ))
+        }
+        bundles.append(contentsOf: assetCatalogs)
+        bundles.sort { $0.name < $1.name }
+        let resourceSize = bundles.reduce(0) { $0 + $1.size }
+        return ModulePackageSize(
+            name: name,
+            version: nil,
+            size: binarySize + resourceSize,
+            libraries: libraries,
+            resource: ModuleResourceSize(bundles: bundles, size: resourceSize)
+        )
+    }
+
+    private static func moduleName(for parts: [String], appName: String) -> String {
+        guard parts.count > 1 else { return appName }
+        if parts[0] == "Frameworks" {
+            if parts[1].hasSuffix(".framework") {
+                return String(parts[1].dropLast(".framework".count))
+            }
+            if parts[1].hasSuffix(".dylib") {
+                return parts[1]
+            }
+        }
+        if ["PlugIns", "Watch", "AppClips"].contains(parts[0]) {
+            return "\(parts[0])/\(parts[1])"
+        }
+        return appName
+    }
+
+    private static func isMachO(at url: URL) throws -> Bool {
+        guard let handle = FileHandle(forReadingAtPath: url.path) else {
+            throw PackageSizeError.unreadableFile(url.path)
+        }
+        defer { handle.closeFile() }
+        let magic = [UInt8](handle.readData(ofLength: 4))
+        return magic == [0xfe, 0xed, 0xfa, 0xce]
+            || magic == [0xce, 0xfa, 0xed, 0xfe]
+            || magic == [0xfe, 0xed, 0xfa, 0xcf]
+            || magic == [0xcf, 0xfa, 0xed, 0xfe]
+            || magic == [0xca, 0xfe, 0xba, 0xbe]
+            || magic == [0xbe, 0xba, 0xfe, 0xca]
+            || magic == [0xca, 0xfe, 0xba, 0xbf]
+            || magic == [0xbf, 0xba, 0xfe, 0xca]
+    }
+
+    private static func isAssetCatalog(at url: URL) throws -> Bool {
+        guard let handle = FileHandle(forReadingAtPath: url.path) else {
+            throw PackageSizeError.unreadableFile(url.path)
+        }
+        defer { handle.closeFile() }
+        return handle.readData(ofLength: 8) == Data("BOMStore".utf8)
+    }
+
     static func compare(
         baseline: AppPackageSize,
         comparison: AppPackageSize,
@@ -320,25 +527,28 @@ enum APPComparisonReporter {
         body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:28px;color:#222}
         table{border-collapse:collapse;width:100%;margin:12px 0 28px}th,td{border:1px solid #ddd;padding:8px 10px;text-align:right}
         th{background:#f6f7f8}.left{text-align:left}.positive{color:#c62828}.negative{color:#188038}.zero{color:#666}
-        .tag{padding:2px 7px;border-radius:10px;background:#eee;font-size:12px}.empty{color:#777;padding:12px 0}
+        .tag{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+        .tag.changed{background:#fff4d6;color:#946200}.tag.added{background:#e5f6ec;color:#137333}
+        .tag.removed{background:#fdecea;color:#b3261e}.tag.unchanged{background:#f1f3f4;color:#5f6368}
+        .empty{color:#777;padding:12px 0}
         .app-paths{white-space:pre-line;line-height:1.7}
         </style>
         <script>
         const report=\(json);
         const statuses={added:'新增',removed:'删除',changed:'变化',unchanged:'未变化'};
-        const kinds={binary:'二进制',resource:'文件',asset:'ImageSet/DataSet'};
+        const kinds={binary:'二进制',resource:'文件',asset:'ImageSet'};
         function size(value,signed=false){const sign=value<0?'-':(signed&&value>0?'+':'');let n=Math.abs(value);if(n<1000)return sign+n+'B';n=n/1000;if(n<1000)return sign+n.toFixed(1)+'KB';return sign+(n/1000).toFixed(2)+'MB'}
         function percent(item){if(item.deltaPercent===null||item.deltaPercent===undefined)return'-';const sign=item.deltaPercent>0?'+':'';return sign+item.deltaPercent.toFixed(2)+'%'}
         function cls(value){return value>0?'positive':value<0?'negative':'zero'}
         function summaryRow(name,item){return `<tr><td class="left">${name}</td><td>${size(item.baselineSize)}</td><td>${size(item.comparisonSize)}</td><td class="${cls(item.deltaSize)}">${size(item.deltaSize,true)}</td><td class="${cls(item.deltaSize)}">${percent(item)}</td></tr>`}
-        function detailRows(items){if(items.length===0)return '<tr><td colspan="9" class="empty">无增量明细</td></tr>';return items.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.module}</td><td class="left">${item.container||'-'}</td><td class="left">${item.name}</td><td>${kinds[item.kind]}</td><td><span class="tag">${statuses[item.status]}</span></td><td>${size(item.size.baselineSize)}</td><td>${size(item.size.comparisonSize)}</td><td class="${cls(item.size.deltaSize)}">${size(item.size.deltaSize,true)} (${percent(item.size)})</td></tr>`).join('')}
-        function onLoad(){document.getElementById('apps').textContent='基线 APP：'+report.baselineApp+'\\n对比 APP：'+report.comparisonApp;document.getElementById('summary').innerHTML=summaryRow('总大小',report.total)+summaryRow('二进制',report.binary)+summaryRow('资源',report.resource);document.getElementById('components').innerHTML=report.components.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.name}</td><td><span class="tag">${statuses[item.status]}</span></td><td>${size(item.total.baselineSize)}</td><td>${size(item.total.comparisonSize)}</td><td class="${cls(item.total.deltaSize)}">${size(item.total.deltaSize,true)}</td><td class="${cls(item.binary.deltaSize)}">${size(item.binary.deltaSize,true)}</td><td class="${cls(item.resource.deltaSize)}">${size(item.resource.deltaSize,true)}</td><td>${percent(item.total)}</td></tr>`).join('');document.getElementById('binaryDetails').innerHTML=detailRows(report.binaryDetails);document.getElementById('resourceDetails').innerHTML=detailRows(report.resourceDetails)}
+        function detailRows(items,showContainer){if(items.length===0)return `<tr><td colspan="${showContainer?9:8}" class="empty">无增量明细</td></tr>`;return items.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.module}</td>${showContainer?`<td class="left">${item.container||'-'}</td>`:''}<td class="left">${item.name}</td><td>${kinds[item.kind]}</td><td><span class="tag ${item.status}">${statuses[item.status]}</span></td><td>${size(item.size.baselineSize)}</td><td>${size(item.size.comparisonSize)}</td><td class="${cls(item.size.deltaSize)}">${size(item.size.deltaSize,true)} (${percent(item.size)})</td></tr>`).join('')}
+        function onLoad(){document.getElementById('apps').textContent='基线 APP：'+report.baselineApp+'\\n对比 APP：'+report.comparisonApp;document.getElementById('summary').innerHTML=summaryRow('总大小',report.total)+summaryRow('二进制',report.binary)+summaryRow('资源',report.resource);document.getElementById('components').innerHTML=report.components.map((item,index)=>`<tr><td>${index+1}</td><td class="left">${item.name}</td><td><span class="tag ${item.status}">${statuses[item.status]}</span></td><td>${size(item.total.baselineSize)}</td><td>${size(item.total.comparisonSize)}</td><td class="${cls(item.total.deltaSize)}">${size(item.total.deltaSize,true)}</td><td class="${cls(item.binary.deltaSize)}">${size(item.binary.deltaSize,true)}</td><td class="${cls(item.resource.deltaSize)}">${size(item.resource.deltaSize,true)}</td><td>${percent(item.total)}</td></tr>`).join('');document.getElementById('binaryDetails').innerHTML=detailRows(report.binaryDetails,false);document.getElementById('resourceDetails').innerHTML=detailRows(report.resourceDetails,true)}
         </script></head>
         <body onload="onLoad()"><h1>APP 包体积增量报告</h1><p id="apps" class="app-paths"></p>
         <h2>总体变化</h2><table><thead><tr><th class="left">类型</th><th>基线</th><th>对比</th><th>增量</th><th>增幅</th></tr></thead><tbody id="summary"></tbody></table>
         <h2>模块变化</h2><table><thead><tr><th>#</th><th class="left">模块</th><th>状态</th><th>基线大小</th><th>对比大小</th><th>总增量</th><th>二进制增量</th><th>资源增量</th><th>增幅</th></tr></thead><tbody id="components"></tbody></table>
-        <h2>二进制增量明细</h2><table><thead><tr><th>#</th><th class="left">模块</th><th class="left">库</th><th class="left">文件</th><th>类型</th><th>状态</th><th>基线大小</th><th>对比大小</th><th>增量</th></tr></thead><tbody id="binaryDetails"></tbody></table>
-        <h2>资源增量明细</h2><table><thead><tr><th>#</th><th class="left">模块</th><th class="left">Bundle</th><th class="left">资源</th><th>类型</th><th>状态</th><th>基线大小</th><th>对比大小</th><th>增量</th></tr></thead><tbody id="resourceDetails"></tbody></table>
+        <h2>二进制增量明细</h2><table><thead><tr><th>#</th><th class="left">模块</th><th class="left">文件</th><th>类型</th><th>状态</th><th>基线大小</th><th>对比大小</th><th>增量</th></tr></thead><tbody id="binaryDetails"></tbody></table>
+        <h2>资源增量明细</h2><p>ImageSet 是 Assets.car 内图片的展开明细，与 Assets.car 文件增量不可叠加。</p><table><thead><tr><th>#</th><th class="left">模块</th><th class="left">Bundle</th><th class="left">资源</th><th>类型</th><th>状态</th><th>基线大小</th><th>对比大小</th><th>增量</th></tr></thead><tbody id="resourceDetails"></tbody></table>
         </body></html>
         """
         APPAnalyze.shared.reporterManager.generateReport(text: html, fileName: "comparison.html")
@@ -396,7 +606,7 @@ enum APPComparisonReporter {
         var result: [String: SizeDetailItem] = [:]
         for component in package.components {
             for bundle in component.resource.bundles {
-                for file in bundle.files where file.name != "Assets.car" {
+                for file in bundle.files {
                     insert(
                         SizeDetailItem(module: component.name, container: bundle.name, name: file.name, kind: .resource, size: file.size),
                         into: &result

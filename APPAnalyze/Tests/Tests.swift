@@ -103,6 +103,57 @@ final class Tests: XCTestCase {
         XCTAssertEqual(components["Removed"]?.total.deltaSize, -40)
     }
 
+    func testComparisonPackageSizeCountsEveryAppFileOnce() throws {
+        let appURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent("App.app")
+        try FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appURL.deletingLastPathComponent()) }
+
+        func write(_ path: String, bytes: [UInt8]) throws {
+            let url = appURL.appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data(bytes).write(to: url)
+        }
+        let magic: [UInt8] = [0xcf, 0xfa, 0xed, 0xfe]
+        try write("App", bytes: magic + Array(repeating: 0, count: 6))
+        try write("Assets.car", bytes: Array(repeating: 1, count: 7))
+        try write("Launch.storyboardc/Nested/View.nib", bytes: [1, 2, 3])
+        try write("_CodeSignature/CodeResources", bytes: [1, 2])
+        try write("Frameworks/Kit.framework/Kit", bytes: magic + Array(repeating: 0, count: 4))
+        try write("Frameworks/Kit.framework/_CodeSignature/CodeResources", bytes: Array(repeating: 1, count: 9))
+        try write("Frameworks/libswift_Test.dylib", bytes: magic + [1, 2])
+        try write("PlugIns/Share.appex/Share", bytes: magic + [1])
+        try write("PlugIns/Share.appex/Info.plist", bytes: Array(repeating: 1, count: 11))
+
+        let package = try APPComparisonReporter.packageSize(appPath: appURL.path)
+        let components = Dictionary(uniqueKeysWithValues: package.components.map { ($0.name, $0) })
+        XCTAssertEqual(
+            components["App"]?.resource.bundles.flatMap(\.files).map(\.name).sorted(),
+            ["Assets.car", "Launch.storyboardc/Nested/View.nib", "_CodeSignature/CodeResources"]
+        )
+        XCTAssertEqual(package.allSize, 61)
+        XCTAssertEqual(package.binarySize, 29)
+        XCTAssertEqual(package.resourceSize, 32)
+        XCTAssertEqual(components["App"]?.size, 22)
+        XCTAssertEqual(components["Kit"]?.size, 17)
+        XCTAssertEqual(components["libswift_Test.dylib"]?.size, 6)
+        XCTAssertEqual(components["PlugIns/Share.appex"]?.size, 16)
+
+        let empty = AppPackageSize(allSize: 0, binarySize: 0, resourceSize: 0, components: [])
+        let report = APPComparisonReporter.compare(
+            baseline: empty,
+            comparison: package,
+            baselineApp: "Empty.app",
+            comparisonApp: appURL.path,
+            incrementThreshold: 0
+        )
+        XCTAssertEqual(report.resourceDetails.first { $0.name == "Assets.car" }?.size.deltaSize, 7)
+    }
+
     func testPackageComparisonFiltersIncrementsBelowThreshold() {
         let baseline = AppPackageSize(
             allSize: 600,
@@ -224,6 +275,13 @@ final class Tests: XCTestCase {
         let json = try String(contentsOf: outputURL.appendingPathComponent("comparison.json"), encoding: .utf8)
         XCTAssertTrue(html.contains("二进制增量明细"))
         XCTAssertTrue(html.contains("资源增量明细"))
+        XCTAssertFalse(html.contains("<th class=\"left\">库</th>"))
+        XCTAssertTrue(html.contains("detailRows(report.binaryDetails,false)"))
+        XCTAssertTrue(html.contains("detailRows(report.resourceDetails,true)"))
+        XCTAssertTrue(html.contains(".tag.changed{background:#fff4d6"))
+        XCTAssertTrue(html.contains(".tag.added{background:#e5f6ec"))
+        XCTAssertTrue(html.contains(".tag.removed{background:#fdecea"))
+        XCTAssertTrue(html.contains("class=\"tag ${item.status}\""))
         XCTAssertTrue(html.contains("基线 APP："))
         XCTAssertTrue(html.contains("对比 APP："))
         XCTAssertTrue(html.contains("\\n对比 APP："))
@@ -312,6 +370,26 @@ final class Tests: XCTestCase {
         XCTAssertEqual(details["Removed.o"]?.size.deltaSize, -6)
         XCTAssertEqual(details["DynamicKit"]?.module, "DynamicKit")
         XCTAssertEqual(details["DynamicKit"]?.size.deltaSize, 5)
+    }
+
+    func testLinkMapKeepsFrameworkLibraryDistinctFromModule() throws {
+        let linkMap = """
+        # Arch: arm64
+        # Object files:
+        [  1] /BuildProductsPath/Release-iphoneos/KGListenModule/KGListenModule.framework/KGListenModule(KGSongCommentInnerVC.o)
+        [  2] /BuildProductsPath/Release-iphoneos/FeatureModule/Shared.framework/libShared.a(Other.o)
+        # Symbols:
+        0x1000 0x000000000000000A [  1] _first
+        0x100A 0x000000000000000B [  2] _second
+        """
+
+        let objects = try LinkMapParser.parse(content: linkMap, appName: "App", expectedArch: "arm64")
+        let details = Dictionary(uniqueKeysWithValues: objects.map { ($0.name, $0) })
+
+        XCTAssertEqual(details["KGSongCommentInnerVC.o"]?.module, "KGListenModule")
+        XCTAssertEqual(details["KGSongCommentInnerVC.o"]?.container, "KGListenModule.framework/KGListenModule")
+        XCTAssertEqual(details["Other.o"]?.module, "FeatureModule")
+        XCTAssertEqual(details["Other.o"]?.container, "Shared.framework/libShared.a")
     }
 
     func testLinkMapParserRejectsMismatchedArchitecture() {

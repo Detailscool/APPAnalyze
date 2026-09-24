@@ -49,10 +49,8 @@ public class APPAnalyze {
         comparisonLinkMapPath: String? = nil,
         incrementThreshold: Int = 100
     ) async throws {
-        parser = IPAParser(appPath: baselineAppPath)
-        config.check()
-        let baseline = await packageSize(appPath: baselineAppPath)
-        let comparison = await packageSize(appPath: comparisonAppPath)
+        let baseline = try APPComparisonReporter.packageSize(appPath: baselineAppPath)
+        let comparison = try APPComparisonReporter.packageSize(appPath: comparisonAppPath)
         let baselineAppName = URL(fileURLWithPath: baselineAppPath).deletingPathExtension().lastPathComponent
         let comparisonAppName = URL(fileURLWithPath: comparisonAppPath).deletingPathExtension().lastPathComponent
         let baselineLinkMap = try baselineLinkMapPath.map {
@@ -78,10 +76,4 @@ public class APPAnalyze {
         APPComparisonReporter.generateReport(report)
     }
 
-    private func packageSize(appPath: String) async -> AppPackageSize {
-        APP.shared.reset()
-        let modules = await IPAParser(appPath: appPath).parse()
-        await ModuleParser.parse(modules: modules, generateModuleReport: false)
-        return APPPackageSizeReporter.packageSize()
-    }
 }

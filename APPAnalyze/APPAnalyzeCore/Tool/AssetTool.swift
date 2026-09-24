@@ -21,14 +21,27 @@ public let PackedAssetImage = "PackedAssetImage"
 
 enum AssetsCarTool {
     private static func getAssetsInfo(path: String) -> [AssetsItem] {
-        let output = Command.shell(
-            in: APPAnalyze.shared.config.currentDirectoryPath,
-            launchPath: "/usr/bin/assetutil",
-            arguments: ["--info", path],
-            encoding: .isoLatin1
-        )
-
-        guard let data = output.data(using: .utf8) else {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/assetutil")
+        process.arguments = ["--info", path]
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = FileHandle.standardError
+        do {
+            try process.run()
+        } catch {
+            print("❌ assetutil failed: \(path): \(error)")
+            return []
+        }
+        stdout.fileHandleForWriting.closeFile()
+        let outputData = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            print("❌ assetutil exited with status \(process.terminationStatus): \(path)")
+            return []
+        }
+        guard let output = String(data: outputData, encoding: .isoLatin1),
+              let data = output.data(using: .utf8) else {
             print("❌ assetutil output cannot convert to UTF8: \(path)")
             return []
         }
